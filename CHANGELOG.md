@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- CI: quoted the workflow step name that made `ci.yml` unparseable (the parse
+  error also broke the Dependabot `github_actions` updater runs).
+- CI: removed `assert` statements from package code so bandit's B101 check
+  passes on `sz_file_combined_consumer`.
+- CI: pip-audit now audits the dependency closure without the local package —
+  `--strict` and editable-install skipping conflicted, so the local editable
+  project is no longer installed into the audit environment.
+- CI: made the Docker build step shellcheck-clean.
+
 ## [0.1.0] - 2026-09-23
 
 Initial Python port of the **file-input mode** of
