@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lint:
+    name: ruff + mypy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package + dev tools
+        run: python -m pip install -e '.[dev]'
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Type check
+        run: mypy
+
+  unit:
+    name: Unit tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install package + dev tools
+        run: python -m pip install -e '.[dev]'
+
+      - name: Run unit tests (pure logic, no engine)
+        run: pytest tests/unit
+
+  integration:
+    name: Integration tests (real engine, PostgreSQL)
+    runs-on: ubuntu-latest
+    container:
+      # Pinned (NOT :latest) for reproducibility; --user root so apt/pip can write.
+      image: senzing/senzingsdk-runtime:4.4.1
+      options: --user root
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: senzing
+          POSTGRES_PASSWORD: senzing
+          POSTGRES_DB: G2
+        options: >-
+          --health-cmd "pg_isready -U senzing -d G2"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: senzing
+      PYTHONPATH: /opt/senzing/er/sdk/python
+      # Senzing's colon-form connection (host:port:database) — the engine parses
+      # the database name after a COLON, not a slash.
+      SENZING_ENGINE_CONFIGURATION_JSON: >-
+        {"PIPELINE":{"CONFIGPATH":"/etc/opt/senzing","RESOURCEPATH":"/opt/senzing/er/resources","SUPPORTPATH":"/opt/senzing/data"},"SQL":{"CONNECTION":"postgresql://senzing:senzing@postgres:5432:G2"}}
+    steps:
+      # The runtime image ships without git; install it FIRST so checkout does a
+      # real clone instead of the REST tarball fallback.
+      - name: Install git + build prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Senzing init tooling + Python
+        # senzingsdk-setup ships the schema DDL; senzingsdk-tools ships the
+        # Python native binding (senzing_core) under /opt/senzing/er/sdk/python.
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            senzingsdk-setup senzingsdk-tools postgresql-client python3 python3-pip python3-venv
+
+      - name: Initialize Senzing repository (schema DDL + default config)
+        # Mirrors sz_init_postgresql-v4: apply the DDL with psql (slash-form libpq
+        # URL), then register the default ER configuration via the Python SDK.
+        # The TEST data source is registered by the test fixture itself.
+        run: |
+          set -euo pipefail
+          psql "postgresql://senzing:senzing@postgres:5432/G2" -q -v ON_ERROR_STOP=1 \
+            -f /opt/senzing/er/resources/schema/szcore-schema-postgresql-create.sql
+          python3 - <<'PY'
+          import os
+          import senzing_core
+          factory = senzing_core.SzAbstractFactoryCore("ci_init", os.environ["SENZING_ENGINE_CONFIGURATION_JSON"])
+          mgr = factory.create_configmanager()
+          if not mgr.get_default_config_id():
+              mgr.set_default_config(mgr.create_config_from_template().export(), "CI initial configuration")
+          print("default config id:", mgr.get_default_config_id())
+          factory.destroy()
+          PY
+
+      - name: Install package + dev tools
+        run: python3 -m pip install --break-system-packages -e '.[dev]'
+
+      - name: Run the full suite with coverage (unit + real-engine integration)
+        # The Senzing environment is a process singleton: the suite runs
+        # single-process; the CLI subprocess tests exercise the exit-code paths.
+        run: pytest --cov --cov-report=term-missing --cov-report=xml -p no:cacheprovider
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  docker:
+    name: Docker build (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: postgres
+            args: "WITH_POSTGRES=1 WITH_MSSQL=0"
+          - backend: mssql
+            args: "WITH_POSTGRES=0 WITH_MSSQL=1"
+          - backend: both
+            args: "WITH_POSTGRES=1 WITH_MSSQL=1"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Build image
+        run: |
+          BUILD_ARGS=""
+          for kv in ${{ matrix.args }}; do BUILD_ARGS="$BUILD_ARGS --build-arg $kv"; done
+          docker build $BUILD_ARGS -t sz_file_combined_consumer:${{ matrix.backend }} .
+
+      - name: Smoke: image starts and reports a config error without an engine config
+        run: |
+          set +e
+          docker run --rm sz_file_combined_consumer:${{ matrix.backend }} --file /nonexistent.jsonl
+          code=$?
+          set -e
+          test "$code" -eq 1 || { echo "expected exit 1 (config error), got $code"; exit 1; }

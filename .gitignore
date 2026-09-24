@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# runtime artifacts
+*.rejected.jsonl
+*.db
+
+# session-handoff notes (not committed)
+STATUS.md
+NEXT_STEPS.md

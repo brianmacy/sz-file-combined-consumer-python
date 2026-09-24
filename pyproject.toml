@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sz-file-combined-consumer"
+version = "0.1.0"
+description = "Combined Senzing file load + redo driver in Python: JSONL file -> add_record, reject file, concurrent redo, one redo% knob"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "Brian Macy" }]
+dependencies = [
+  # Abstract SDK (SzEngine, SzEngineFlags, error taxonomy). The native
+  # binding `senzing_core` ships with the Senzing runtime under
+  # /opt/senzing/er/sdk/python and is NOT a PyPI dependency.
+  "senzing>=4.1,<5",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "pytest-cov>=6.0",
+  "ruff>=0.12",
+  "mypy>=1.16",
+]
+
+[project.scripts]
+sz_file_combined_consumer = "sz_file_combined_consumer.runtime:entry"
+
+[tool.setuptools]
+packages = ["sz_file_combined_consumer"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "S", "C90", "N", "SIM", "RUF"]
+ignore = [
+  "S101",  # asserts are the test idiom
+  "RUF012",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S603", "S607"]  # tests spawn the CLI as a subprocess on purpose
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+packages = ["sz_file_combined_consumer"]
+
+[[tool.mypy.overrides]]
+module = ["senzing_core", "senzing_core.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "engine: needs a real Senzing engine (SENZING_ENGINE_CONFIGURATION_JSON); skipped otherwise",
+]
+
+[tool.coverage.run]
+source = ["sz_file_combined_consumer"]
+branch = true
+# Measure the CLI subprocesses the integration suite spawns (real signals /
+# teardown paths) and save data even through os._exit.
+patch = ["subprocess", "_exit"]
+
+[tool.coverage.report]
+show_missing = true
