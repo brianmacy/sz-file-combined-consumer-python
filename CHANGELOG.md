@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-24
+
+No behaviour change; CI and code-quality only.
+
+### Changed
+- Four small value-mapping helpers (`ParseError` message, `classify_error`,
+  `redo_preferring_count`, `mode`) use explicit returns instead of `match`
+  blocks: CodeQL does not model `match` exhaustiveness and flagged them as
+  mixed/uninitialized returns. Pattern-matching dispatch elsewhere is unchanged.
+- CI: `actions/upload-artifact` 4.6.2 -> 7.0.1 (Dependabot #1).
+
 ## [0.1.0] - 2026-09-23
 
 Initial Python port of the **file-input mode** of

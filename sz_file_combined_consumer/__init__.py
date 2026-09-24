@@ -20,4 +20,4 @@ one process.
 INSTANCE_NAME = "sz_file_combined_consumer"
 """Instance/module name passed to the Senzing environment."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

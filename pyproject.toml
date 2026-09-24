@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sz-file-combined-consumer"
-version = "0.1.0"
+version = "0.1.1"
 description = "Combined Senzing file load + redo driver in Python: JSONL file -> add_record, reject file, concurrent redo, one redo% knob"
 readme = "README.md"
 license = { text = "Apache-2.0" }
