@@ -22,12 +22,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install package + dev tools
-        run: python -m pip install -e '.[dev]' pip-audit
+      - name: Install dependencies (then remove the local package itself)
+        # pip-audit audits the environment against PyPI advisories; the package
+        # under test is not on PyPI, so install it to pull its dependency
+        # closure, then uninstall it so only real dependencies are audited.
+        run: |
+          python -m pip install '.[dev]' pip-audit
+          python -m pip uninstall -y sz-file-combined-consumer
 
       - name: Audit installed dependencies
-        # --skip-editable: the package under test is installed editable and is not on PyPI.
-        run: pip-audit --strict --skip-editable --progress-spinner off
+        run: pip-audit --strict --progress-spinner off
 
   bandit:
     name: bandit (static security scan)
