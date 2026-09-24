@@ -198,11 +198,12 @@ def mode(s: StatusLine) -> str:
     """Derived (not tracked) mode string, for log readability only."""
     match s.redo_percent:
         case 0:
-            return "load_only"
+            name = "load_only"
         case 100:
-            return "redo_only"
+            name = "redo_only"
         case _:
-            return "redo_drain" if s.load_active is False else "mixed"
+            name = "redo_drain" if s.load_active is False else "mixed"
+    return name
 
 
 def status_object(s: StatusLine) -> dict[str, object]:

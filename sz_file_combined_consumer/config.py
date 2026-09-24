@@ -207,12 +207,13 @@ def redo_preferring_count(threads: int, redo_percent: int) -> int:
     """|B| = clamp(round(N * redo% / 100), 1, N-1) for interior redo%; 0 at 0; N at 100."""
     match redo_percent:
         case 0:
-            return 0
+            count = 0
         case 100:
-            return threads
+            count = threads
         case pct:
             raw = round(threads * pct / 100.0)
-            return max(1, min(raw, max(threads - 1, 1)))
+            count = max(1, min(raw, max(threads - 1, 1)))
+    return count
 
 
 def validate_topology(threads: int, redo_percent: int, input_file: str | None) -> None:
@@ -228,7 +229,8 @@ def validate_topology(threads: int, redo_percent: int, input_file: str | None) -
             "--file cannot be combined with redo% = 100: the pure redoer reads no file "
             "(use redo% < 100 to load the file and drain redo in one run)"
         )
-    if 0 < redo_percent < 100 and threads < 2:
+    interior = redo_percent not in (0, 100)
+    if interior and threads < 2:
         raise ConfigError(
             f"0 < redo% < 100 requires at least 2 worker threads (got {threads}): "
             "one worker cannot host both preference classes"

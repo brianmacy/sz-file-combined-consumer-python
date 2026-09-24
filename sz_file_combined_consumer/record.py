@@ -45,11 +45,12 @@ class ParseError(ValueError):
     def _message(self) -> str:
         match self.kind:
             case ParseErrorKind.INVALID_JSON:
-                return "record body is not valid JSON"
+                text = "record body is not valid JSON"
             case ParseErrorKind.NOT_AN_OBJECT:
-                return "record body is not a JSON object"
+                text = "record body is not a JSON object"
             case ParseErrorKind.MISSING_FIELD:
-                return f"record is missing required string field '{self.field}'"
+                text = f"record is missing required string field '{self.field}'"
+        return text
 
     def __eq__(self, other: object) -> bool:
         return (
@@ -128,11 +129,12 @@ def classify_error(err: BaseException) -> ErrorClass:
     """
     match err:
         case SzBadInputError() | SzRetryTimeoutExceededError():
-            return ErrorClass.BAD_INPUT_OR_TIMEOUT
+            cls = ErrorClass.BAD_INPUT_OR_TIMEOUT
         case SzError() if senz_error_code(err) == SENZ_DQM_ERROR_CODE:
-            return ErrorClass.BAD_INPUT_OR_TIMEOUT
+            cls = ErrorClass.BAD_INPUT_OR_TIMEOUT
         case _:
-            return ErrorClass.FATAL
+            cls = ErrorClass.FATAL
+    return cls
 
 
 def logging_id(record: str) -> str:
