@@ -205,15 +205,12 @@ def resolve_reject_file(input_file: str | None, explicit: str | None) -> str | N
 
 def redo_preferring_count(threads: int, redo_percent: int) -> int:
     """|B| = clamp(round(N * redo% / 100), 1, N-1) for interior redo%; 0 at 0; N at 100."""
-    match redo_percent:
-        case 0:
-            count = 0
-        case 100:
-            count = threads
-        case pct:
-            raw = round(threads * pct / 100.0)
-            count = max(1, min(raw, max(threads - 1, 1)))
-    return count
+    if redo_percent == 0:
+        return 0
+    if redo_percent == 100:
+        return threads
+    raw = round(threads * redo_percent / 100.0)
+    return max(1, min(raw, max(threads - 1, 1)))
 
 
 def validate_topology(threads: int, redo_percent: int, input_file: str | None) -> None:

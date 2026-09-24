@@ -196,14 +196,11 @@ def _round1(v: float) -> float:
 
 def mode(s: StatusLine) -> str:
     """Derived (not tracked) mode string, for log readability only."""
-    match s.redo_percent:
-        case 0:
-            name = "load_only"
-        case 100:
-            name = "redo_only"
-        case _:
-            name = "redo_drain" if s.load_active is False else "mixed"
-    return name
+    if s.redo_percent == 0:
+        return "load_only"
+    if s.redo_percent == 100:
+        return "redo_only"
+    return "redo_drain" if s.load_active is False else "mixed"
 
 
 def status_object(s: StatusLine) -> dict[str, object]:

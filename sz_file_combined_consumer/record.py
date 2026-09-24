@@ -30,6 +30,12 @@ class ParseErrorKind(Enum):
     MISSING_FIELD = auto()
 
 
+_PARSE_MESSAGES = {
+    ParseErrorKind.INVALID_JSON: "record body is not valid JSON",
+    ParseErrorKind.NOT_AN_OBJECT: "record body is not a JSON object",
+}
+
+
 class ParseError(ValueError):
     """Why a body could not be turned into a well-formed :class:`RecordInfo`.
 
@@ -43,14 +49,9 @@ class ParseError(ValueError):
         super().__init__(self._message())
 
     def _message(self) -> str:
-        match self.kind:
-            case ParseErrorKind.INVALID_JSON:
-                text = "record body is not valid JSON"
-            case ParseErrorKind.NOT_AN_OBJECT:
-                text = "record body is not a JSON object"
-            case ParseErrorKind.MISSING_FIELD:
-                text = f"record is missing required string field '{self.field}'"
-        return text
+        if self.kind is ParseErrorKind.MISSING_FIELD:
+            return f"record is missing required string field '{self.field}'"
+        return _PARSE_MESSAGES[self.kind]
 
     def __eq__(self, other: object) -> bool:
         return (
@@ -127,14 +128,11 @@ def classify_error(err: BaseException) -> ErrorClass:
       file resumable; rejecting would shovel good records into the reject file
       for the whole outage.
     """
-    match err:
-        case SzBadInputError() | SzRetryTimeoutExceededError():
-            cls = ErrorClass.BAD_INPUT_OR_TIMEOUT
-        case SzError() if senz_error_code(err) == SENZ_DQM_ERROR_CODE:
-            cls = ErrorClass.BAD_INPUT_OR_TIMEOUT
-        case _:
-            cls = ErrorClass.FATAL
-    return cls
+    if isinstance(err, SzBadInputError | SzRetryTimeoutExceededError):
+        return ErrorClass.BAD_INPUT_OR_TIMEOUT
+    if isinstance(err, SzError) and senz_error_code(err) == SENZ_DQM_ERROR_CODE:
+        return ErrorClass.BAD_INPUT_OR_TIMEOUT
+    return ErrorClass.FATAL
 
 
 def logging_id(record: str) -> str:
