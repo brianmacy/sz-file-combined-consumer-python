@@ -223,9 +223,8 @@ def result_consumer(results: ClosableQueue[Outcome], want_info: bool, state: Loa
         st, outcome = results.get(timeout=0.25)
         if st is TryState.CLOSED:
             return
-        if st is TryState.EMPTY:
+        if outcome is None:
             continue
-        assert outcome is not None
         try:
             _settle(outcome, want_info, state, ticker)
         except Exception:
@@ -309,7 +308,10 @@ def run(config: Config, factory: SzAbstractFactory, engine: SzEngine) -> tuple[b
     environment); ``error`` is None on success.
     """
     path, reject_path = config.input_file, config.reject_file
-    assert path is not None and reject_path is not None, "file mode validated at startup"
+    if path is None or reject_path is None:
+        raise ValueError(
+            "file mode requires an input file and a reject file (validated at startup)"
+        )
     n, redo_pref = config.threads, config.redo_pref_workers()
     log.info(
         "File loader: reading %r with %d workers (%d redo-preferring, redo%% = %d; "

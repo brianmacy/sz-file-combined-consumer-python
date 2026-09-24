@@ -117,14 +117,14 @@ def worker_loop(ctx: WorkerCtx) -> None:
     """Worker thread entry point; a raised exception is a fatal worker failure."""
     try:
         match (ctx.load, ctx.redo):
-            case (LoadSide(), None):
-                _pure_load_loop(ctx)
-            case (None, RedoSide()):
-                _pure_redo_loop(ctx)
-            case (LoadSide(), RedoSide()):
-                _mixed_loop(ctx)
+            case (LoadSide() as load, None):
+                _pure_load_loop(ctx, load)
+            case (None, RedoSide() as redo):
+                _pure_redo_loop(ctx, redo)
+            case (LoadSide() as load, RedoSide() as redo):
+                _mixed_loop(ctx, load, redo)
             case _:
-                raise AssertionError("worker requires at least one work source")
+                raise RuntimeError("worker requires at least one work source")
     except Exception:
         log.exception("worker %d died", ctx.worker_id)
         stats.mark_fatal()
@@ -139,46 +139,33 @@ def _send_fatal(load: LoadSide, msg: str) -> None:
     )
 
 
-def _pure_load_loop(ctx: WorkerCtx) -> None:
-    load = ctx.load
-    assert load is not None
+def _pure_load_loop(ctx: WorkerCtx, load: LoadSide) -> None:
     while stats.RUNNING.is_set():
         state, item = load.work.get(timeout=0.25)
-        match state:
-            case TryState.CLOSED:
-                return
-            case TryState.EMPTY:
-                continue
-            case TryState.ITEM:
-                assert item is not None
-                if not _process_load(ctx, load, item):
-                    return
-
-
-def _pure_redo_loop(ctx: WorkerCtx) -> None:
-    redo = ctx.redo
-    assert redo is not None
-    while True:
-        state, job = redo.jobs.try_get()
-        match state:
-            case TryState.CLOSED:
-                return
-            case TryState.EMPTY:
-                if stats.RUNNING.is_set():
-                    time.sleep(IDLE_BACKOFF)
-                    continue
-                # Shutdown: drain one record queued since the probe, then exit.
-                state, job = redo.jobs.try_get()
-                if state is not TryState.ITEM:
-                    return
-        assert job is not None
-        if not _process_redo(ctx, redo, job):
+        if state is TryState.CLOSED:
+            return
+        if item is not None and not _process_load(ctx, load, item):
             return
 
 
-def _mixed_loop(ctx: WorkerCtx) -> None:
-    load, redo = ctx.load, ctx.redo
-    assert load is not None and redo is not None
+def _pure_redo_loop(ctx: WorkerCtx, redo: RedoSide) -> None:
+    while True:
+        state, job = redo.jobs.try_get()
+        if state is TryState.CLOSED:
+            return
+        if state is TryState.EMPTY:
+            if stats.RUNNING.is_set():
+                time.sleep(IDLE_BACKOFF)
+                continue
+            # Shutdown: drain one record queued since the probe, then exit.
+            state, job = redo.jobs.try_get()
+            if state is not TryState.ITEM:
+                return
+        if job is not None and not _process_redo(ctx, redo, job):
+            return
+
+
+def _mixed_loop(ctx: WorkerCtx, load: LoadSide, redo: RedoSide) -> None:
     prefer_redo = ctx.worker_class is WorkerClass.REDO_PREFERRING
     load_open = redo_open = True
     idle_passes = 0

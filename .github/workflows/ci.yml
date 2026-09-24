@@ -158,11 +158,11 @@ jobs:
 
       - name: Build image
         run: |
-          BUILD_ARGS=""
-          for kv in ${{ matrix.args }}; do BUILD_ARGS="$BUILD_ARGS --build-arg $kv"; done
-          docker build $BUILD_ARGS -t sz_file_combined_consumer:${{ matrix.backend }} .
+          BUILD_ARGS=()
+          for kv in ${{ matrix.args }}; do BUILD_ARGS+=(--build-arg "$kv"); done
+          docker build "${BUILD_ARGS[@]}" -t "sz_file_combined_consumer:${{ matrix.backend }}" .
 
-      - name: Smoke: image starts and reports a config error without an engine config
+      - name: "Smoke: image starts and reports a config error without an engine config"
         run: |
           set +e
           docker run --rm sz_file_combined_consumer:${{ matrix.backend }} --file /nonexistent.jsonl
